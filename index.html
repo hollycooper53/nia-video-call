@@ -384,13 +384,32 @@ function startListening(){
   }, 60);
 }
 function stopListening(){ listening = false; clearInterval(vadTimer); vadTimer = null; }
+/* iPhone records audio/mp4 with codec details Whisper won't take as a data URL, so upload it to fal storage and pass a link */
+async function uploadAudio(blob, mime){
+  const key = $('key').value.trim(), ext = mime.includes('webm') ? 'webm' : mime.includes('ogg') ? 'ogg' : mime.includes('wav') ? 'wav' : 'm4a';
+  try {
+    const init = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3', {
+      method:'POST', headers:{'Authorization':'Key ' + key, 'Content-Type':'application/json'},
+      body: JSON.stringify({ content_type: mime, file_name: 'speech.' + ext }) });
+    if (!init.ok) throw new Error('init ' + init.status);
+    const { upload_url, file_url } = await init.json();
+    const put = await fetch(upload_url, { method:'PUT', headers:{'Content-Type': mime}, body: blob });
+    if (!put.ok) throw new Error('put ' + put.status);
+    return file_url;
+  } catch(e) {
+    /* fallback: plain data URL without codec details */
+    const b64 = await new Promise(r => { const f = new FileReader(); f.onload = () => r(String(f.result).split(',')[1]); f.readAsDataURL(blob); });
+    return 'data:' + mime + ';base64,' + b64;
+  }
+}
 async function sendClip(chunks, type, ms){
   if (!chunks.length || ms < 350) { startListening(); return; }   // ignore tiny blips
-  const blob = new Blob(chunks, {type: type || 'audio/mp4'});
-  const dataUri = await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
+  const mime = ((type || 'audio/mp4').split(';')[0]) || 'audio/mp4';
+  const blob = new Blob(chunks, {type: mime});
   setStatus('Got it…', true);
   try {
-    const t = await fal('fal-ai/wizper', { audio_url: dataUri, language: 'en' });
+    const audioUrl = await uploadAudio(blob, mime);
+    const t = await fal('fal-ai/wizper', { audio_url: audioUrl, language: 'en' });
     const text = (t.text || '').trim();
     if (text.length < 2) { startListening(); return; }
     respond(text);

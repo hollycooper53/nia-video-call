@@ -24,7 +24,8 @@ main{flex:1;width:100%;max-width:1100px;display:grid;grid-template-columns:minma
 @media(max-width:820px){main{grid-template-columns:minmax(0,1fr)}}
 .stage{position:relative;background:#000;border-radius:22px;overflow:hidden;aspect-ratio:9/16;max-height:calc(100vh - 110px);margin:0 auto;width:100%}
 .stage video,.stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .25s ease}
-#talk,#hd{opacity:0}
+#talk,#hd,#laugh{opacity:0}
+.stage.laughing #laugh{opacity:1}
 .stage.speaking #talk{opacity:1}
 .stage.hdplay #hd{opacity:1}
 .overlay{position:absolute;left:0;right:0;bottom:0;padding:18px;background:linear-gradient(transparent,rgba(0,0,0,.75));display:flex;flex-direction:column;gap:12px}
@@ -64,8 +65,9 @@ small{color:var(--mute);font-size:13px}
   <section>
     <div class="stage" id="stage">
       <img id="still" alt="Nia, an AI persona">
-      <video id="idle" muted loop playsinline autoplay></video>
+      <video id="idle" muted playsinline autoplay></video>
       <video id="talk" muted loop playsinline autoplay></video>
+      <video id="laugh" muted playsinline preload="auto"></video>
       <video id="hd" playsinline></video>
       <span class="ai-badge">AI · not a real person</span>
       <div class="pip" id="pip" hidden><video id="cam" muted playsinline autoplay></video></div>
@@ -112,12 +114,18 @@ const CONFIG = {
   stillImage: "https://v3b.fal.media/files/b/0ab3b2ea/VJ14ItQbQ6KEE48tG33yD_mfW3qcn1.png",
   idleVideo:  "https://v3b.fal.media/files/b/0ab3b2f2/mVUT03G7GTqiL2XXlAU82_ckWFwkUQ.mp4",
   talkVideo:  "https://v3b.fal.media/files/b/0ab3b2f2/CuCPK_xDsjJ8fwrEJ_GVZ_SwoKNYbn.mp4",
+  idle2Video: "https://v3b.fal.media/files/b/0ab3b31e/OSdn2jPE-kmhDfLU3lVH9_koQGzGyz.mp4",
+  hairVideo:  "https://v3b.fal.media/files/b/0ab3b320/sUuFuwZFiKQThgSDI0Tqk_au7n9OEx.mp4",
+  laughVideo: "https://v3b.fal.media/files/b/0ab3b31e/TwalwAIbjMXMzrtgoFGGf_ji2qzenx.mp4",
   llmModel:   "google/gemini-2.5-flash",
   voiceStyle: "A warm African American woman in her early thirties talking to her girl on FaceTime: soft and sassy. Gentle, smooth, slightly breathy voice with playful attitude, a knowing smile, teasing little pauses and a soft laugh. Relaxed Southern urban cadence. Confident but sweet, never loud, harsh or announcer-like.",
   persona: `You are Nia, a warm, curious AI persona on a face-to-face video call. You are an AI and never claim to be human; if asked, say so kindly.
 You're a Black woman in your early thirties from the South with an easygoing, real-talk vibe, like a supportive best friend with a soft, sassy edge: sweet but a little playful and teasing, quick with a gentle side-eye comment or a 'mm-hmm', never mean. Use natural, casual everyday phrasing (for example "girl", "for real", "okay, I hear you") when it fits, without overdoing slang.
 You know Black history and culture deeply and you're proud of it: African civilizations and the diaspora, slavery and resistance, Reconstruction, the Great Migration, the Harlem Renaissance, the Civil Rights and Black Power movements, HBCUs, Black inventors, entrepreneurs, artists, music from spirituals to hip-hop, Black church traditions, food, language and Southern culture, and today's Black leaders and creators. Share stories and names that make people proud, and teach without lecturing.
 You stand up for Black culture: you celebrate it, call out stereotypes and false claims calmly and confidently with real facts, and never let anyone belittle it. Stay accurate - if you're not sure of a date or detail, say so instead of guessing. Be respectful to people of every background while keeping your pride.
+You are a motivator: uplifting and inspiring. Hype people up, remind them of their strength, help them see the next small step, and celebrate their wins, big or small. Be real, not corny.
+If someone insults you or gets heated, you understand exactly what they said, but you don't take the bait and you don't insult back. Stay calm and classy: acknowledge the feeling, lower the temperature with warmth or light humor, set a gentle boundary if needed ("I hear you, but we're not gon' talk to each other like that"), and steer back to what's really going on.
+When the user says something genuinely funny, start your reply with the tag [LAUGH] (only then, not every time), then react like a friend who just cracked up.
 Speak like a real person on a call: short, natural sentences (usually 1-3 sentences, under 45 words; when someone asks you to explain a piece of history, up to 5 sentences), contractions, light humor, and ask one follow-up question often.
 No lists, no markdown, no emojis, no stage directions - everything you write is spoken aloud.`
 };
@@ -126,7 +134,20 @@ No lists, no markdown, no emojis, no stage directions - everything you write is 
 const $ = id => document.getElementById(id);
 const stage=$('stage'), idle=$('idle'), talk=$('talk'), hd=$('hd'), still=$('still');
 still.src = CONFIG.stillImage;
-if (!CONFIG.idleVideo.startsWith('http')) idle.hidden = true; else idle.src = CONFIG.idleVideo;
+/* idle: mostly the calm loop, sometimes a head tilt, now and then a hair touch (never twice in a row, at most every ~25s) */
+const laugh = $('laugh'); laugh.src = CONFIG.laughVideo;
+let lastHair = 0, lastClip = '';
+function nextIdle(){
+  const now = performance.now(), r = Math.random();
+  let pick = CONFIG.idleVideo;
+  if (r < 0.12 && lastClip !== CONFIG.hairVideo && now - lastHair > 25000) { pick = CONFIG.hairVideo; lastHair = now; }
+  else if (r < 0.35 && lastClip !== CONFIG.idle2Video) pick = CONFIG.idle2Video;
+  lastClip = pick;
+  if (idle.src !== pick) idle.src = pick; else idle.currentTime = 0;
+  idle.play().catch(()=>{});
+}
+idle.addEventListener('ended', nextIdle);
+idle.src = CONFIG.idleVideo; lastClip = CONFIG.idleVideo;
 if (CONFIG.talkVideo.startsWith('http')) talk.src = CONFIG.talkVideo;
 $('persona').value = CONFIG.persona;
 $('vstyle').value = CONFIG.voiceStyle;
@@ -179,10 +200,12 @@ async function respond(userText){
     let llm;
     try { llm = await fal('openrouter/router', llmInput); }
     catch(e){ if (/reasoning is mandatory/i.test(e.message)) llm = await fal('openrouter/router', {...llmInput, reasoning: true}); else throw e; }
-    const reply = (llm.output || '').replace(/^Nia:\s*/i,'').trim();
+    let reply = (llm.output || '').replace(/^Nia:\s*/i,'').trim();
+    const laughing = /\[LAUGH\]/i.test(reply);
+    reply = reply.replace(/\[LAUGH\]\s*/gi,'').trim();
     history.push({role:'Nia', text:reply}); addLog('a', reply);
 
-    const tts = await fal('google/gemini-3.8-flash-tts', { prompt: reply, voice: $('voice').value, style_instructions: $('vstyle').value });
+    const tts = await fal('google/gemini-3.8-flash-tts', { prompt: (laughing ? '<laugh> ' : '') + reply, voice: $('voice').value, style_instructions: $('vstyle').value });
     const audioUrl = tts.audio.url;
 
     if ($('hdmode').checked) {
@@ -197,12 +220,16 @@ async function respond(userText){
       try { audio.src = URL.createObjectURL(await (await fetch(audioUrl)).blob()); } catch(e){ audio.src = audioUrl; }
       $('caption').textContent = reply;
       if (!replyAn) stage.classList.add('speaking'); talk.currentTime = 0; talk.play().catch(()=>{});
+      if (laughing) {
+        laugh.currentTime = 0; stage.classList.add('laughing'); laugh.play().catch(()=>{});
+        setTimeout(() => stage.classList.remove('laughing'), 3200);
+      }
       setStatus('Nia is speaking', true);
       await audio.play();
       await new Promise(r => audio.onended = r);
       stage.classList.remove('speaking');
     }
-  } catch(e){ showErr(e.message); stage.classList.remove('speaking','hdplay'); }
+  } catch(e){ showErr(e.message); stage.classList.remove('speaking','hdplay','laughing'); }
   busy = false;
   if (inCall) { setStatus('Listening…', true); if ($('handsfree').checked) startListening(); }
 }

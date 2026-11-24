@@ -33,6 +33,10 @@ main{flex:1;width:100%;max-width:1100px;display:grid;grid-template-columns:minma
 .meter i{display:block;height:100%;width:0;background:var(--live);transition:width .08s}
 .stage.hdplay #hd{opacity:1}
 .hot{position:absolute;bottom:5%;width:14%;aspect-ratio:1;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;transform:translateX(-50%);z-index:3;cursor:pointer}
+#hotEnd{width:15%;display:grid;place-items:center;transition:background .3s}
+#hotEnd svg{width:44%;opacity:0;transition:opacity .3s}
+#hotEnd.off{background:#77706b;box-shadow:0 0 0 2px #77706b}
+#hotEnd.off svg{opacity:1}
 .hot.on{box-shadow:inset 0 0 0 4px #e5484d;background:rgba(229,72,77,.18)}
 .hint{position:absolute;left:0;right:0;top:42%;text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 6px #000;z-index:2;pointer-events:none}
 .overlay{position:absolute;left:0;right:0;bottom:0;padding:18px 18px 24%;background:linear-gradient(transparent,rgba(0,0,0,.75));display:flex;flex-direction:column;gap:12px}
@@ -81,7 +85,7 @@ small{color:var(--mute);font-size:13px}
       <div class="hint" id="hint">Tap Simone to start the call</div>
       <button class="hot" id="hotMute" style="left:28.3%" aria-label="Mute microphone"></button>
       <button class="hot" id="hotCam" style="left:50%" aria-label="Turn camera on or off"></button>
-      <button class="hot" id="hotEnd" style="left:71.7%" aria-label="End call"></button>
+      <button class="hot off" id="hotEnd" style="left:71.7%" aria-label="Start call"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg></button>
       <div class="overlay">
         <div class="status"><span class="dot" id="dot"></span><span id="statusText">Tap Simone to start the call</span><span class="meter" id="meter" hidden><i></i></span></div>
         <div class="caption" id="caption"></div>
@@ -468,6 +472,7 @@ async function startCall(){
     try { mediaStream = await navigator.mediaDevices.getUserMedia({audio:true}); } catch(e2){ showErr('Need microphone access to talk.'); starting = false; $('hint').hidden = false; return; }
   }
   try { micAn = actx.createAnalyser(); micAn.fftSize = 1024; actx.createMediaStreamSource(mediaStream).connect(micAn); } catch(e){ showErr('Could not read the microphone.'); starting = false; return; }
+  $('hotEnd').classList.remove('off'); $('hotEnd').setAttribute('aria-label','End call');
   inCall = true; idleLoop.start(); talkLoop.start(); $('meter').hidden = false; meterLoop();
   $('startBtn').hidden = true; $('endBtn').hidden = false; $('talkBtn').hidden = false;
   history = [];
@@ -477,6 +482,7 @@ async function startCall(){
 
 function endCall(){
   if (!inCall) return; muted = false; camOff = false; $('hotMute').classList.remove('on'); $('hotCam').classList.remove('on'); $('hint').hidden = false;
+  $('hotEnd').classList.add('off'); $('hotEnd').setAttribute('aria-label','Start call');
   inCall = false; stopListening(); audio.pause(); hd.pause(); stage.classList.remove('speaking','hdplay');
   if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
   $('pip').hidden = true; $('meter').hidden = true;  $('endBtn').hidden = true; $('talkBtn').hidden = true; manual = false; $('talkBtn').textContent = 'Tap to talk';
@@ -485,7 +491,7 @@ function endCall(){
 
 let muted = false, camOff = false;
 stage.addEventListener('click', e => { if (!inCall && !e.target.closest('button')) startCall(); });
-$('hotEnd').addEventListener('click', e => { e.stopPropagation(); endCall(); });
+$('hotEnd').addEventListener('click', e => { e.stopPropagation(); if (inCall) endCall(); else startCall(); });
 $('hotMute').addEventListener('click', e => {
   e.stopPropagation(); if (!inCall || !mediaStream) return;
   muted = !muted; mediaStream.getAudioTracks().forEach(t => t.enabled = !muted);

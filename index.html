@@ -185,8 +185,9 @@ async function respond(userText){
       await new Promise(r => hd.onended = r);
       stage.classList.remove('hdplay');
     } else {
-      audio.src = audioUrl; $('caption').textContent = reply;
-      stage.classList.add('speaking'); talk.currentTime = 0; talk.play().catch(()=>{});
+      try { audio.src = URL.createObjectURL(await (await fetch(audioUrl)).blob()); } catch(e){ audio.src = audioUrl; }
+      $('caption').textContent = reply;
+      if (!replyAn) stage.classList.add('speaking'); talk.currentTime = 0; talk.play().catch(()=>{});
       setStatus('Nia is speaking', true);
       await audio.play();
       await new Promise(r => audio.onended = r);
@@ -197,36 +198,64 @@ async function respond(userText){
   if (inCall) { setStatus('Listening…', true); if ($('handsfree').checked) startListening(); }
 }
 
-/* ---- listening: browser speech recognition, Whisper (fal) fallback ---- */
+/* ---- listening: our own voice detector + Whisper on fal (works on iPhone) ---- */
+let actx = null, micAn = null, mr = null, listening = false, vadTimer = null;
+function micLevel(){ const d = new Uint8Array(micAn.fftSize); micAn.getByteTimeDomainData(d); let s=0; for (const v of d){ const x=(v-128)/128; s+=x*x; } return Math.sqrt(s/d.length); }
 function startListening(){
-  if (!inCall || busy) return;
-  if (SR) {
-    rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = false;
-    let finalText = '';
-    rec.onresult = e => { let t=''; for (const r of e.results) { t += r[0].transcript; if (r.isFinal) finalText = t; } $('caption').textContent = t; };
-    rec.onend = () => { rec = null; if (finalText) respond(finalText); else if (inCall && !busy && $('handsfree').checked) setTimeout(startListening, 250); };
-    rec.onerror = ev => { if (ev.error === 'not-allowed') showErr('Microphone blocked. Allow mic access and reload.'); };
-    try { rec.start(); setStatus('Listening…', true); } catch(e){}
-  } else {
-    recordWhisper();
-  }
+  if (!inCall || busy || listening || !micAn) return;
+  listening = true; setStatus('Listening…', true);
+  let noise = 0.01, speaking = false, lastVoice = 0, startedAt = 0, chunks = [];
+  const audioOnly = new MediaStream(mediaStream.getAudioTracks());
+  const t0 = performance.now();
+  vadTimer = setInterval(() => {
+    if (!listening) return;
+    const lv = micLevel(), now = performance.now();
+    if (now - t0 < 600) { noise = Math.max(noise, lv); return; }      // learn room noise
+    const thresh = Math.max(0.02, noise * 2.2);
+    if (lv > thresh) {
+      lastVoice = now;
+      if (!speaking) {
+        speaking = true; startedAt = now; chunks = [];
+        mr = new MediaRecorder(audioOnly); mr.ondataavailable = e => e.data.size && chunks.push(e.data);
+        mr.onstop = () => sendClip(chunks, mr.mimeType, now - startedAt);
+        mr.start(); setStatus('Hearing you…', true);
+      }
+    } else if (speaking && now - lastVoice > 1100) {       // 1.1s of quiet = you finished
+      speaking = false; stopListening(); if (mr && mr.state === 'recording') mr.stop();
+    }
+  }, 60);
 }
-function stopListening(){ if (rec) { try { rec.onend = null; rec.stop(); } catch(e){} rec = null; } }
+function stopListening(){ listening = false; clearInterval(vadTimer); vadTimer = null; }
+async function sendClip(chunks, type, ms){
+  if (!chunks.length || ms < 350) { startListening(); return; }   // ignore tiny blips
+  const blob = new Blob(chunks, {type: type || 'audio/mp4'});
+  const dataUri = await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
+  setStatus('Got it…', true);
+  try {
+    const t = await fal('fal-ai/wizper', { audio_url: dataUri, language: 'en' });
+    const text = (t.text || '').trim();
+    if (text.length < 2) { startListening(); return; }
+    respond(text);
+  } catch(e){ showErr(e.message); startListening(); }
+}
 
-let mr = null;
-function recordWhisper(){
-  if (!mediaStream) return;
-  const chunks = []; mr = new MediaRecorder(mediaStream);
-  mr.ondataavailable = e => chunks.push(e.data);
-  mr.onstop = async () => {
-    const blob = new Blob(chunks, {type: mr.mimeType});
-    const dataUri = await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
-    setStatus('Transcribing…', true);
-    try { const t = await fal('fal-ai/wizper', { audio_url: dataUri, language: 'en' }); respond(t.text || ''); }
-    catch(e){ showErr(e.message); }
-  };
-  mr.start(); setStatus('Recording — release to send', true);
+/* ---- mouth follows her voice: talking loop only shows while sound is playing ---- */
+let replyAn = null;
+function hookReplyAudio(){
+  if (replyAn || !actx) return;
+  try { const src = actx.createMediaElementSource(audio); replyAn = actx.createAnalyser(); replyAn.fftSize = 512; src.connect(replyAn); replyAn.connect(actx.destination); } catch(e){}
 }
+function mouthLoop(){
+  if (replyAn && !audio.paused) {
+    const d = new Uint8Array(replyAn.fftSize); replyAn.getByteTimeDomainData(d);
+    let s=0; for (const v of d){ const x=(v-128)/128; s+=x*x; }
+    const on = Math.sqrt(s/d.length) > 0.035;
+    if (on) mouthLoop.last = performance.now();
+    stage.classList.toggle('speaking', performance.now() - (mouthLoop.last||0) < 140);
+  }
+  requestAnimationFrame(mouthLoop);
+}
+requestAnimationFrame(mouthLoop);
 
 /* ---- call controls ---- */
 $('startBtn').onclick = async () => {
@@ -237,12 +266,14 @@ $('startBtn').onclick = async () => {
   audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   audio.play().catch(()=>{});
   setStatus('Connecting…', true);
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); hookReplyAudio(); } catch(e){}
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
     $('cam').srcObject = mediaStream; $('pip').hidden = false;
   } catch(e){
     try { mediaStream = await navigator.mediaDevices.getUserMedia({audio:true}); } catch(e2){ showErr('Need microphone access to talk.'); return; }
   }
+  try { micAn = actx.createAnalyser(); micAn.fftSize = 1024; actx.createMediaStreamSource(mediaStream).connect(micAn); } catch(e){ showErr('Could not read the microphone.'); return; }
   inCall = true; idle.play().catch(()=>{});
   $('startBtn').hidden = true; $('endBtn').hidden = false; $('talkBtn').hidden = $('handsfree').checked;
   history = [];
@@ -255,8 +286,11 @@ $('endBtn').onclick = () => {
   setStatus('Call ended', false); $('caption').textContent = '';
 };
 $('handsfree').onchange = () => { if (inCall) { $('talkBtn').hidden = $('handsfree').checked; if ($('handsfree').checked) startListening(); else stopListening(); } };
-const holdStart = e => { e.preventDefault(); if (busy) return; if (SR) startListening(); else recordWhisper(); };
-const holdEnd = () => { if (rec) rec.stop(); if (mr && mr.state === 'recording') mr.stop(); };
+const holdStart = e => { e.preventDefault(); if (busy || !mediaStream) return;
+  const chunks = []; mr = new MediaRecorder(new MediaStream(mediaStream.getAudioTracks()));
+  const t = performance.now(); mr.ondataavailable = ev => ev.data.size && chunks.push(ev.data);
+  mr.onstop = () => sendClip(chunks, mr.mimeType, performance.now() - t); mr.start(); setStatus('Recording — let go to send', true); };
+const holdEnd = () => { if (mr && mr.state === 'recording' && !listening) mr.stop(); };
 $('talkBtn').addEventListener('pointerdown', holdStart);
 $('talkBtn').addEventListener('pointerup', holdEnd);
 $('talkBtn').addEventListener('pointerleave', holdEnd);

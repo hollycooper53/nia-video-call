@@ -53,8 +53,11 @@ button.primary{background:var(--live)}
 button.end{background:var(--end);color:#fff}
 button.ghost{background:#2a2c33;color:var(--ink)}
 button[disabled]{opacity:.45;cursor:default}
-.pip{position:absolute;top:14px;right:14px;width:26%;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#222;border:2px solid rgba(255,255,255,.2)}
-.pip video{position:static;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.pip{position:absolute;top:2%;left:81.3%;width:15.2%;height:14%;border-radius:10px;overflow:hidden;background:#2a2724;z-index:2;display:grid;place-items:center}
+.pip span{font-size:11px;color:#cfc8c0;text-align:center;line-height:1.2;padding:4px}
+.pip.live span{display:none}
+.pip:not(.live) video{display:none}
+.pip video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
 .ai-badge{position:absolute;top:14px;left:14px;font-size:12px;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:99px}
 aside{background:var(--panel);border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 110px);overflow:auto}
 aside h2{font-size:15px;margin:0;color:var(--mute);font-weight:500}
@@ -81,7 +84,7 @@ small{color:var(--mute);font-size:13px}
       <video id="laugh" muted playsinline preload="auto"></video>
       <video id="hd" playsinline></video>
       <span class="ai-badge">AI · not a real person</span>
-      <div class="pip" id="pip" hidden><video id="cam" muted playsinline autoplay></video></div>
+      <div class="pip" id="pip"><video id="cam" muted playsinline autoplay></video><span id="pipText">You</span></div>
       <div class="hint" id="hint">Tap Simone to start the call</div>
       <button class="hot" id="hotMute" style="left:28.3%" aria-label="Mute microphone"></button>
       <button class="hot" id="hotCam" style="left:50%" aria-label="Turn camera on or off"></button>
@@ -467,11 +470,12 @@ async function startCall(){
   try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); hookReplyAudio(); } catch(e){}
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
-    $('cam').srcObject = mediaStream; $('pip').hidden = false;
+    showCam();
   } catch(e){
     try { mediaStream = await navigator.mediaDevices.getUserMedia({audio:true}); } catch(e2){ showErr('Need microphone access to talk.'); starting = false; $('hint').hidden = false; return; }
   }
   try { micAn = actx.createAnalyser(); micAn.fftSize = 1024; actx.createMediaStreamSource(mediaStream).connect(micAn); } catch(e){ showErr('Could not read the microphone.'); starting = false; return; }
+  camOff = false; showCam();
   $('hotEnd').classList.remove('off'); $('hotEnd').setAttribute('aria-label','End call');
   inCall = true; idleLoop.start(); talkLoop.start(); $('meter').hidden = false; meterLoop();
   $('startBtn').hidden = true; $('endBtn').hidden = false; $('talkBtn').hidden = false;
@@ -485,7 +489,7 @@ function endCall(){
   $('hotEnd').classList.add('off'); $('hotEnd').setAttribute('aria-label','Start call');
   inCall = false; stopListening(); audio.pause(); hd.pause(); stage.classList.remove('speaking','hdplay');
   if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-  $('pip').hidden = true; $('meter').hidden = true;  $('endBtn').hidden = true; $('talkBtn').hidden = true; manual = false; $('talkBtn').textContent = 'Tap to talk';
+  $('pip').classList.remove('live'); $('pipText').textContent = 'You'; $('meter').hidden = true;  $('endBtn').hidden = true; $('talkBtn').hidden = true; manual = false; $('talkBtn').textContent = 'Tap to talk';
   setStatus('Call ended', false); $('caption').textContent = '';
 }
 
@@ -499,10 +503,27 @@ $('hotMute').addEventListener('click', e => {
   if (muted) { stopListening(); setStatus('You\'re muted', false); }
   else { setStatus('Listening…', true); if ($('handsfree').checked) startListening(); }
 });
-$('hotCam').addEventListener('click', e => {
+function showCam(){
+  const v = mediaStream && mediaStream.getVideoTracks().find(t => t.readyState === 'live');
+  if (v && !camOff) { $('cam').srcObject = new MediaStream([v]); $('cam').play().catch(()=>{}); $('pip').classList.add('live'); }
+  else { $('pip').classList.remove('live'); $('pipText').textContent = 'Camera off'; }
+  $('hotCam').classList.toggle('on', camOff || !v);
+}
+$('hotCam').addEventListener('click', async e => {
   e.stopPropagation(); if (!inCall || !mediaStream) return;
-  camOff = !camOff; mediaStream.getVideoTracks().forEach(t => t.enabled = !camOff);
-  $('pip').hidden = camOff || !mediaStream.getVideoTracks().length; $('hotCam').classList.toggle('on', camOff);
+  const v = mediaStream.getVideoTracks().find(t => t.readyState === 'live');
+  if (v && !camOff) {                     // turn camera off (fully releases it)
+    camOff = true; v.stop(); mediaStream.removeTrack(v); showCam(); return;
+  }
+  camOff = false;                         // turn camera on
+  try {
+    const cs = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    cs.getVideoTracks().forEach(t => mediaStream.addTrack(t));
+    showCam();
+  } catch(err) {
+    camOff = true; showCam();
+    showErr('Camera not available. If you are on a phone call, hang up and try again, or allow camera access in Safari (aA button > Website Settings).');
+  }
 });
 $('handsfree').onchange = () => { if (inCall) { if ($('handsfree').checked) startListening(); else stopListening(); } };
 /* Tap to talk: tap once to start, tap again to send (works even if hands-free misses you) */

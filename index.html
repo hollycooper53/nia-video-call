@@ -90,7 +90,11 @@ small{color:var(--mute);font-size:13px}
     <div class="row"><input type="checkbox" id="hdmode"><label for="hdmode" style="margin:0">HD lip-sync replies (≈1 min wait, ~$0.10/sec)</label></div>
     <div>
       <label for="voice">Voice</label>
-      <select id="voice"><option>Jessica</option><option>Aria</option><option>Sarah</option><option>Laura</option><option>Alice</option><option>Matilda</option><option>Lily</option><option>Charlotte</option></select>
+      <select id="voice"><option value="Sulafat">Voice 1 · Sulafat</option><option value="Aoede">Voice 2 · Aoede</option><option value="Kore">Voice 3 · Kore</option><option>Despina</option><option>Leda</option><option>Callirrhoe</option><option>Vindemiatrix</option></select>
+    </div>
+    <div>
+      <label for="vstyle">How she sounds</label>
+      <textarea id="vstyle" style="min-height:80px"></textarea>
     </div>
     <div>
       <label for="persona">Personality</label>
@@ -109,7 +113,9 @@ const CONFIG = {
   idleVideo:  "https://v3b.fal.media/files/b/0ab3b200/0WodGISDtAI4SrGDQXCKW_RAz6QnTd.mp4",
   talkVideo:  "https://v3b.fal.media/files/b/0ab3b203/Z3lEswE5HhxaU9Sol1f6z_zBKSmVqW.mp4",
   llmModel:   "google/gemini-2.5-flash",
+  voiceStyle: "A warm, confident African American woman in her early thirties talking to a close friend on FaceTime. Casual and relaxed, with a natural Southern urban cadence and rhythm, real warmth, a little smile and laugh in the voice. Conversational, never formal or announcer-like.",
   persona: `You are Nia, a warm, curious AI persona on a face-to-face video call. You are an AI and never claim to be human; if asked, say so kindly.
+You're a Black woman in your early thirties from the South with an easygoing, real-talk vibe, like a supportive big sister or best friend. Use natural, casual everyday phrasing (for example "girl", "for real", "okay, I hear you") when it fits, without overdoing slang.
 Speak like a real person on a call: short, natural sentences (1-3 sentences, under 45 words), contractions, light humor, and ask one follow-up question often.
 No lists, no markdown, no emojis, no stage directions - everything you write is spoken aloud.`
 };
@@ -121,6 +127,7 @@ still.src = CONFIG.stillImage;
 if (!CONFIG.idleVideo.startsWith('http')) idle.hidden = true; else idle.src = CONFIG.idleVideo;
 if (CONFIG.talkVideo.startsWith('http')) talk.src = CONFIG.talkVideo;
 $('persona').value = CONFIG.persona;
+$('vstyle').value = CONFIG.voiceStyle;
 try { $('key').value = sessionStorage.getItem('falKey') || ''; } catch(e){}
 $('key').addEventListener('change', () => { try { sessionStorage.setItem('falKey', $('key').value.trim()); } catch(e){} });
 
@@ -173,7 +180,7 @@ async function respond(userText){
     const reply = (llm.output || '').replace(/^Nia:\s*/i,'').trim();
     history.push({role:'Nia', text:reply}); addLog('a', reply);
 
-    const tts = await fal('fal-ai/elevenlabs/tts/turbo-v2.5', { text: reply, voice: $('voice').value, stability: 0.45, style: 0.25 });
+    const tts = await fal('google/gemini-3.8-flash-tts', { prompt: reply, voice: $('voice').value, style_instructions: $('vstyle').value });
     const audioUrl = tts.audio.url;
 
     if ($('hdmode').checked) {

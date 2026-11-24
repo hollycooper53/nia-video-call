@@ -108,7 +108,7 @@ const CONFIG = {
   stillImage: "https://v3b.fal.media/files/b/0ab3b1ee/2uyOAbw5SFCxtsN6IWeTo_TKuNw6G0.png",
   idleVideo:  "https://v3b.fal.media/files/b/0ab3b200/0WodGISDtAI4SrGDQXCKW_RAz6QnTd.mp4",
   talkVideo:  "https://v3b.fal.media/files/b/0ab3b203/Z3lEswE5HhxaU9Sol1f6z_zBKSmVqW.mp4",
-  llmModel:   "google/gemini-3.8-flash",
+  llmModel:   "google/gemini-2.5-flash",
   persona: `You are Nia, a warm, curious AI persona on a face-to-face video call. You are an AI and never claim to be human; if asked, say so kindly.
 Speak like a real person on a call: short, natural sentences (1-3 sentences, under 45 words), contractions, light humor, and ask one follow-up question often.
 No lists, no markdown, no emojis, no stage directions - everything you write is spoken aloud.`
@@ -161,14 +161,15 @@ async function falQueue(endpoint, input){
 async function respond(userText){
   if (!userText.trim() || busy) return;
   busy = true; stopListening();
-  addLog('u', userText); history.push({role:'User', text:userText});
+  if (!userText.startsWith('(')) addLog('u', userText); history.push({role:'User', text:userText});
   setStatus('Nia is thinking…', true); $('caption').textContent = '';
   try {
     const transcript = history.slice(-12).map(m => m.role + ': ' + m.text).join('\n');
-    const llm = await fal('openrouter/router', {
-      model: CONFIG.llmModel, system_prompt: $('persona').value, temperature: 0.8, max_tokens: 160,
-      prompt: transcript + '\nNia:'
-    });
+    const llmInput = { model: CONFIG.llmModel, system_prompt: $('persona').value, temperature: 0.8, max_tokens: 400,
+      prompt: transcript + '\nNia:' };
+    let llm;
+    try { llm = await fal('openrouter/router', llmInput); }
+    catch(e){ if (/reasoning is mandatory/i.test(e.message)) llm = await fal('openrouter/router', {...llmInput, reasoning: true}); else throw e; }
     const reply = (llm.output || '').replace(/^Nia:\s*/i,'').trim();
     history.push({role:'Nia', text:reply}); addLog('a', reply);
 

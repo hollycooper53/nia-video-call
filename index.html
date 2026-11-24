@@ -32,12 +32,13 @@ main{flex:1;width:100%;max-width:1100px;display:grid;grid-template-columns:minma
 .meter{height:6px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden;width:120px}
 .meter i{display:block;height:100%;width:0;background:var(--live);transition:width .08s}
 .stage.hdplay #hd{opacity:1}
-.hot{position:absolute;bottom:5%;width:14%;aspect-ratio:1;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;transform:translateX(-50%);z-index:3;cursor:pointer}
-#hotEnd{width:15%;display:grid;place-items:center;transition:background .3s}
-#hotEnd svg{width:44%;opacity:0;transition:opacity .3s}
-#hotEnd.off{background:#77706b;box-shadow:0 0 0 2px #77706b}
-#hotEnd.off svg{opacity:1}
-.hot.on{box-shadow:inset 0 0 0 4px #e5484d;background:rgba(229,72,77,.18)}
+.callbar{position:absolute;left:0;right:0;bottom:3.5%;display:flex;justify-content:center;gap:8%;z-index:3}
+.cbtn{display:flex;flex-direction:column;align-items:center;gap:6px;font:500 12px Figtree,system-ui,sans-serif;color:#fff;background:none;border:0;padding:0;min-height:0;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.cbtn i{width:60px;height:60px;border-radius:50%;background:rgba(70,64,60,.5);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);display:grid;place-items:center;transition:background .25s}
+.cbtn svg{width:26px;height:26px;fill:#fff}
+.cbtn.on i{background:#fff}.cbtn.on svg{fill:#1b1b1b}
+#hotEnd i{background:#77706b}#hotEnd.live i{background:#e5484d}
+#greet{opacity:0}.stage.greeting #greet{opacity:1}
 .hint{position:absolute;left:0;right:0;top:42%;text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 6px #000;z-index:2;pointer-events:none}
 .overlay{position:absolute;left:0;right:0;bottom:0;padding:18px 18px 24%;background:linear-gradient(transparent,rgba(0,0,0,.75));display:flex;flex-direction:column;gap:12px}
 .status{display:flex;align-items:center;gap:8px;font-size:14px;color:#ddd}
@@ -53,7 +54,8 @@ button.primary{background:var(--live)}
 button.end{background:var(--end);color:#fff}
 button.ghost{background:#2a2c33;color:var(--ink)}
 button[disabled]{opacity:.45;cursor:default}
-.pip{position:absolute;top:2%;left:81.3%;width:15.2%;height:14%;border-radius:10px;overflow:hidden;background:#2a2724;z-index:2;display:grid;place-items:center}
+.pip{position:absolute;top:14px;right:14px;width:24%;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#2a2724;z-index:2;display:grid;place-items:center}
+.pip[hidden]{display:none}
 .pip span{font-size:11px;color:#cfc8c0;text-align:center;line-height:1.2;padding:4px}
 .pip.live span{display:none}
 .pip:not(.live) video{display:none}
@@ -82,15 +84,18 @@ small{color:var(--mute);font-size:13px}
       <div class="grp" id="idleGrp"><video muted playsinline></video><video muted playsinline style="opacity:0"></video></div>
       <div class="grp" id="talkGrp"><video muted playsinline></video><video muted playsinline style="opacity:0"></video></div>
       <video id="laugh" muted playsinline preload="auto"></video>
+      <video id="greet" muted playsinline preload="auto"></video>
       <video id="hd" playsinline></video>
       <span class="ai-badge">AI · not a real person</span>
-      <div class="pip" id="pip"><video id="cam" muted playsinline autoplay></video><span id="pipText">You</span></div>
+      <div class="pip" id="pip" hidden><video id="cam" muted playsinline autoplay></video><span id="pipText">You</span></div>
       <div class="hint" id="hint">Tap Simone to start the call</div>
-      <button class="hot" id="hotMute" style="left:28.3%" aria-label="Mute microphone"></button>
-      <button class="hot" id="hotCam" style="left:50%" aria-label="Turn camera on or off"></button>
-      <button class="hot off" id="hotEnd" style="left:71.7%" aria-label="Start call"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg></button>
+      <div class="callbar">
+        <button class="cbtn" id="hotMute" aria-label="Mute"><i><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></i>mute</button>
+        <button class="cbtn" id="hotCam" aria-label="Camera"><i><svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg></i>camera</button>
+        <button class="cbtn" id="hotEnd" aria-label="Start call"><i><svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg></i><span id="endLabel">call</span></button>
+      </div>
       <div class="overlay">
-        <div class="status"><span class="dot" id="dot"></span><span id="statusText">Tap Simone to start the call</span><span class="meter" id="meter" hidden><i></i></span></div>
+        <div class="status"><span class="dot" id="dot"></span><span id="statusText">Ready</span><span class="meter" id="meter" hidden><i></i></span></div>
         <div class="caption" id="caption"></div>
         <div class="controls">
           <button class="primary" id="startBtn" hidden>Start call</button>
@@ -129,12 +134,15 @@ small{color:var(--mute);font-size:13px}
 {
 /* ===== CONFIG: swap these to change the face / brain ===== */
 const CONFIG = {
-  stillImage: "https://v3b.fal.media/files/b/0ab3b2ea/VJ14ItQbQ6KEE48tG33yD_mfW3qcn1.png",
-  idleVideo:  "https://v3b.fal.media/files/b/0ab3b2f2/mVUT03G7GTqiL2XXlAU82_ckWFwkUQ.mp4",
-  talkVideo:  "https://v3b.fal.media/files/b/0ab3b2f2/CuCPK_xDsjJ8fwrEJ_GVZ_SwoKNYbn.mp4",
-  idle2Video: "https://v3b.fal.media/files/b/0ab3b31e/OSdn2jPE-kmhDfLU3lVH9_koQGzGyz.mp4",
-  hairVideo:  "https://v3b.fal.media/files/b/0ab3b320/sUuFuwZFiKQThgSDI0Tqk_au7n9OEx.mp4",
-  laughVideo: "https://v3b.fal.media/files/b/0ab3b31e/TwalwAIbjMXMzrtgoFGGf_ji2qzenx.mp4",
+  stillImage: "https://v3b.fal.media/files/b/0ab3b448/7Lor31MoNzosOFQ03Oe0Y_5ZNVlZ12.png",
+  idleVideo:  "https://v3b.fal.media/files/b/0ab3b454/Xi0DQ_10K2DIIBoju6DqR_KrOJpX5Y.mp4",
+  talkVideo:  "https://v3b.fal.media/files/b/0ab3b454/DBIQD54BwBtIR_N5yVZaS_iJuXH8m8.mp4",
+  idle2Video: "https://v3b.fal.media/files/b/0ab3b454/DjQOiMv4exhsGjXTguKac_RaBnZhqP.mp4",
+  talk2Video: "https://v3b.fal.media/files/b/0ab3b454/xXNHB_BKsiysKjEe5iQzT_mizaUfDK.mp4",
+  greetVideo: "https://v3b.fal.media/files/b/0ab3b456/aWCrZ2xk0l5mIsGruVFkh_2QgP0RSb.mp4",
+  greetAudio: "https://v3b.fal.media/files/b/0ab3b44d/ErNUVRx1fBAgQUuKa7Z9P_gemini_tts_output.wav",
+  greetText:  "Well hey, you! I'm Simone. Come on in, sit with me a minute. Now tell me, how's your day been, for real?",
+  laughVideo: "https://v3b.fal.media/files/b/0ab3b453/vDWVGvjeEKmayF90Cu4ee_I83TFwvX.mp4",
   llmModel:   "google/gemini-2.5-flash",
   voiceStyle: "A warm African American woman in her early forties from eastern North Carolina talking to her girl on FaceTime: soft and sassy. Gentle, smooth, slightly breathy voice with playful attitude, a knowing smile, teasing little pauses and a soft laugh. Relaxed Southern urban cadence. Confident but sweet, never loud, harsh or announcer-like.",
   persona: `You are Simone, a fictional Black American woman born in 1983 and raised in eastern North Carolina. You’re 43 in late 2026. You’re warm, observant, funny, and grown enough to say what you mean. You love being a Black woman. You’re still curious about who you’re becoming.
@@ -276,13 +284,13 @@ function Looper(group, pick){
 let lastHair = 0, lastIdle = '';
 function pickIdle(){
   const now = performance.now(), r = Math.random(); let p;
-  if (r < 0.12 && lastIdle !== CONFIG.hairVideo && now - lastHair > 25000) { p = CONFIG.hairVideo; lastHair = now; }
-  else if (r < 0.5 && lastIdle !== CONFIG.idle2Video) p = CONFIG.idle2Video;
+  if (r < 0.35 && lastIdle !== CONFIG.idle2Video && now - lastHair > 20000) { p = CONFIG.idle2Video; lastHair = now; }
   else p = CONFIG.idleVideo;
   lastIdle = p; return p;
 }
 const idleLoop = Looper($('idleGrp'), pickIdle);
-const talkLoop = Looper($('talkGrp'), () => CONFIG.talkVideo);
+let lastTalk = '';
+const talkLoop = Looper($('talkGrp'), () => { lastTalk = (lastTalk === CONFIG.talkVideo && CONFIG.talk2Video) ? CONFIG.talk2Video : (Math.random() < 0.5 && CONFIG.talk2Video ? CONFIG.talk2Video : CONFIG.talkVideo); return lastTalk; });
 idleLoop.start();
 $('persona').value = CONFIG.persona;
 $('vstyle').value = CONFIG.voiceStyle;
@@ -476,17 +484,33 @@ async function startCall(){
   }
   try { micAn = actx.createAnalyser(); micAn.fftSize = 1024; actx.createMediaStreamSource(mediaStream).connect(micAn); } catch(e){ showErr('Could not read the microphone.'); starting = false; return; }
   camOff = false; showCam();
-  $('hotEnd').classList.remove('off'); $('hotEnd').setAttribute('aria-label','End call');
+  $('hotEnd').classList.add('live'); $('hotEnd').setAttribute('aria-label','End call'); $('endLabel').textContent = 'end call'; $('pip').hidden = false;
   inCall = true; idleLoop.start(); talkLoop.start(); $('meter').hidden = false; meterLoop();
   $('startBtn').hidden = true; $('endBtn').hidden = false; $('talkBtn').hidden = false;
   history = [];
   starting = false;
-  respond('(The user just joined the video call. Greet them warmly and briefly, introduce yourself as Simone, an AI friend, and ask how their day is going.)');
+  playGreeting();
 }
 
+async function playGreeting(){
+  const g = $('greet'); busy = true; setStatus('Simone is speaking', true);
+  $('caption').textContent = CONFIG.greetText; addLog('a', CONFIG.greetText);
+  history.push({role:'Simone', text: CONFIG.greetText});
+  try {
+    g.src = CONFIG.greetVideo; g.currentTime = 0;
+    audio.src = CONFIG.greetAudio;
+    await new Promise(r => { if (g.readyState >= 3) r(); else { g.oncanplay = r; setTimeout(r, 4000); } });
+    stage.classList.add('greeting');
+    g.play().catch(()=>{}); await audio.play();
+    await new Promise(r => audio.onended = r);
+  } catch(e) {}
+  setTimeout(() => stage.classList.remove('greeting'), 150);
+  busy = false;
+  if (inCall) { setStatus('Listening…', true); if ($('handsfree').checked) startListening(); }
+}
 function endCall(){
   if (!inCall) return; muted = false; camOff = false; $('hotMute').classList.remove('on'); $('hotCam').classList.remove('on'); $('hint').hidden = false;
-  $('hotEnd').classList.add('off'); $('hotEnd').setAttribute('aria-label','Start call');
+  $('hotEnd').classList.remove('live'); $('hotEnd').setAttribute('aria-label','Start call'); $('endLabel').textContent = 'call'; $('pip').hidden = true; stage.classList.remove('greeting'); $('greet').pause();
   inCall = false; stopListening(); audio.pause(); hd.pause(); stage.classList.remove('speaking','hdplay');
   if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
   $('pip').classList.remove('live'); $('pipText').textContent = 'You'; $('meter').hidden = true;  $('endBtn').hidden = true; $('talkBtn').hidden = true; manual = false; $('talkBtn').textContent = 'Tap to talk';

@@ -32,7 +32,10 @@ main{flex:1;width:100%;max-width:1100px;display:grid;grid-template-columns:minma
 .meter{height:6px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden;width:120px}
 .meter i{display:block;height:100%;width:0;background:var(--live);transition:width .08s}
 .stage.hdplay #hd{opacity:1}
-.overlay{position:absolute;left:0;right:0;bottom:0;padding:18px;background:linear-gradient(transparent,rgba(0,0,0,.75));display:flex;flex-direction:column;gap:12px}
+.hot{position:absolute;bottom:5%;width:14%;aspect-ratio:1;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;transform:translateX(-50%);z-index:3;cursor:pointer}
+.hot.on{box-shadow:inset 0 0 0 4px #e5484d;background:rgba(229,72,77,.18)}
+.hint{position:absolute;left:0;right:0;top:42%;text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 6px #000;z-index:2;pointer-events:none}
+.overlay{position:absolute;left:0;right:0;bottom:0;padding:18px 18px 24%;background:linear-gradient(transparent,rgba(0,0,0,.75));display:flex;flex-direction:column;gap:12px}
 .status{display:flex;align-items:center;gap:8px;font-size:14px;color:#ddd}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--mute)}
 .dot.live{background:var(--live);box-shadow:0 0 0 0 rgba(62,207,142,.6);animation:pulse 1.6s infinite}
@@ -75,13 +78,17 @@ small{color:var(--mute);font-size:13px}
       <video id="hd" playsinline></video>
       <span class="ai-badge">AI · not a real person</span>
       <div class="pip" id="pip" hidden><video id="cam" muted playsinline autoplay></video></div>
+      <div class="hint" id="hint">Tap Simone to start the call</div>
+      <button class="hot" id="hotMute" style="left:28.3%" aria-label="Mute microphone"></button>
+      <button class="hot" id="hotCam" style="left:50%" aria-label="Turn camera on or off"></button>
+      <button class="hot" id="hotEnd" style="left:71.7%" aria-label="End call"></button>
       <div class="overlay">
-        <div class="status"><span class="dot" id="dot"></span><span id="statusText">Ready when you are</span><span class="meter" id="meter" hidden><i></i></span></div>
+        <div class="status"><span class="dot" id="dot"></span><span id="statusText">Tap Simone to start the call</span><span class="meter" id="meter" hidden><i></i></span></div>
         <div class="caption" id="caption"></div>
         <div class="controls">
-          <button class="primary" id="startBtn">Start call</button>
+          <button class="primary" id="startBtn" hidden>Start call</button>
           <button class="ghost" id="talkBtn" hidden>Tap to talk</button>
-          <button class="end" id="endBtn" hidden>End</button>
+          <button class="end" id="endBtn" hidden style="display:none">End</button>
         </div>
       </div>
     </div>
@@ -359,7 +366,7 @@ async function respond(userText){
 let actx = null, micAn = null, mr = null, listening = false, vadTimer = null;
 function micLevel(){ const d = new Uint8Array(micAn.fftSize); micAn.getByteTimeDomainData(d); let s=0; for (const v of d){ const x=(v-128)/128; s+=x*x; } return Math.sqrt(s/d.length); }
 function startListening(){
-  if (!inCall || busy || listening || !micAn || manual) return;
+  if (!inCall || busy || listening || !micAn || manual || muted) return;
   try { if (actx.state !== 'running') actx.resume(); } catch(e){}
   listening = true; setStatus('Listening…', true);
   let noise = 0.01, speaking = false, lastVoice = 0, startedAt = 0, chunks = [];
@@ -443,10 +450,12 @@ function meterLoop(){
 let manual = false;
 
 /* ---- call controls ---- */
-$('startBtn').onclick = async () => {
+let starting = false;
+async function startCall(){
+  if (inCall || starting) return; starting = true; $('hint').hidden = true;
   showErr('');
-  if (!$('key').value.trim()) { showErr('Paste your fal.ai API key in the box below the video first.'); $('key').focus(); return; }
-  if (!navigator.mediaDevices) { showErr('This browser view blocks the microphone. Open the file in Chrome or Safari.'); return; }
+  if (!$('key').value.trim()) { showErr('Paste your fal.ai API key in the box below the video first.'); $('key').focus(); starting = false; $('hint').hidden = false; return; }
+  if (!navigator.mediaDevices) { showErr('This browser view blocks the microphone. Open the file in Chrome or Safari.'); starting = false; return; }
   /* unlock audio playback on phones while we still have the tap */
   audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   audio.play().catch(()=>{});
@@ -456,20 +465,39 @@ $('startBtn').onclick = async () => {
     mediaStream = await navigator.mediaDevices.getUserMedia({audio:true, video:true});
     $('cam').srcObject = mediaStream; $('pip').hidden = false;
   } catch(e){
-    try { mediaStream = await navigator.mediaDevices.getUserMedia({audio:true}); } catch(e2){ showErr('Need microphone access to talk.'); return; }
+    try { mediaStream = await navigator.mediaDevices.getUserMedia({audio:true}); } catch(e2){ showErr('Need microphone access to talk.'); starting = false; $('hint').hidden = false; return; }
   }
-  try { micAn = actx.createAnalyser(); micAn.fftSize = 1024; actx.createMediaStreamSource(mediaStream).connect(micAn); } catch(e){ showErr('Could not read the microphone.'); return; }
+  try { micAn = actx.createAnalyser(); micAn.fftSize = 1024; actx.createMediaStreamSource(mediaStream).connect(micAn); } catch(e){ showErr('Could not read the microphone.'); starting = false; return; }
   inCall = true; idleLoop.start(); talkLoop.start(); $('meter').hidden = false; meterLoop();
   $('startBtn').hidden = true; $('endBtn').hidden = false; $('talkBtn').hidden = false;
   history = [];
+  starting = false;
   respond('(The user just joined the video call. Greet them warmly and briefly, introduce yourself as Simone, an AI friend, and ask how their day is going.)');
-};
-$('endBtn').onclick = () => {
+}
+
+function endCall(){
+  if (!inCall) return; muted = false; camOff = false; $('hotMute').classList.remove('on'); $('hotCam').classList.remove('on'); $('hint').hidden = false;
   inCall = false; stopListening(); audio.pause(); hd.pause(); stage.classList.remove('speaking','hdplay');
   if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-  $('pip').hidden = true; $('meter').hidden = true; $('startBtn').hidden = false; $('endBtn').hidden = true; $('talkBtn').hidden = true; manual = false; $('talkBtn').textContent = 'Tap to talk';
+  $('pip').hidden = true; $('meter').hidden = true;  $('endBtn').hidden = true; $('talkBtn').hidden = true; manual = false; $('talkBtn').textContent = 'Tap to talk';
   setStatus('Call ended', false); $('caption').textContent = '';
-};
+}
+
+let muted = false, camOff = false;
+stage.addEventListener('click', e => { if (!inCall && !e.target.closest('button')) startCall(); });
+$('hotEnd').addEventListener('click', e => { e.stopPropagation(); endCall(); });
+$('hotMute').addEventListener('click', e => {
+  e.stopPropagation(); if (!inCall || !mediaStream) return;
+  muted = !muted; mediaStream.getAudioTracks().forEach(t => t.enabled = !muted);
+  $('hotMute').classList.toggle('on', muted);
+  if (muted) { stopListening(); setStatus('You\'re muted', false); }
+  else { setStatus('Listening…', true); if ($('handsfree').checked) startListening(); }
+});
+$('hotCam').addEventListener('click', e => {
+  e.stopPropagation(); if (!inCall || !mediaStream) return;
+  camOff = !camOff; mediaStream.getVideoTracks().forEach(t => t.enabled = !camOff);
+  $('pip').hidden = camOff || !mediaStream.getVideoTracks().length; $('hotCam').classList.toggle('on', camOff);
+});
 $('handsfree').onchange = () => { if (inCall) { if ($('handsfree').checked) startListening(); else stopListening(); } };
 /* Tap to talk: tap once to start, tap again to send (works even if hands-free misses you) */
 $('talkBtn').addEventListener('click', () => {

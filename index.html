@@ -295,6 +295,10 @@ idleLoop.start();
 $('persona').value = CONFIG.persona;
 $('vstyle').value = CONFIG.voiceStyle;
 try { $('key').value = sessionStorage.getItem('falKey') || ''; } catch(e){}
+/* tester link: ...#key=YOUR_KEY fills the key, then removes it from the address bar */
+{ const m = location.hash.match(/key=([^&]+)/);
+  if (m) { $('key').value = decodeURIComponent(m[1]); try { sessionStorage.setItem('falKey', $('key').value); } catch(e){}
+           history.replaceState(null, '', location.pathname); } }
 $('key').addEventListener('change', () => { try { sessionStorage.setItem('falKey', $('key').value.trim()); } catch(e){} });
 
 let history = [], inCall = false, busy = false, rec = null, audio = new Audio(), mediaStream = null;
